@@ -265,6 +265,11 @@ def scroll_to_tag(view, tag, hook=None):
 
 ############################## FORMATTING HELPERS ##############################
 
+def shorten(s):
+    if len(s) > 100:
+        return s[:97] + '...'
+    return s
+
 def format_tag_for_quickopen(tag, file=1):
     format = []
     tag = ctags.Tag(tag)
@@ -276,7 +281,7 @@ def format_tag_for_quickopen(tag, file=1):
             f += string.Template (
                 '    %($field)s$punct%(symbol)s' ).substitute(locals())
 
-    format = [(f or tag.symbol) % tag, tag.ex_command]
+    format = [(f or tag.symbol) % tag, shorten(tag.ex_command)]
     format[1] = format[1].strip()
     if file: format.insert(1, tag.filename )
     return format
@@ -316,7 +321,9 @@ def tagged_project_files(view, tag_dir):
     if not project or ( project and
                         not  fn.startswith(dirname(project.fileName())) ):
         prefix_arg = fn
-        files = glob.glob(join(dirname(fn),"*"))
+        # files = glob.glob(join(dirname(fn),"*"))
+        # files = list(chain.from_iterable( [os.path.join(root, f) for f in files] for (root, dirs, files) in os.walk(tag_dir) ))
+        files = []
     else:
         prefix_arg = project.fileName()
         mount_points = project.mountPoints()
@@ -565,8 +572,27 @@ class ShowSymbols(sublime_plugin.TextCommand):
         if not files: return
 
         tags_file = tags_file + '_sorted_by_file'
-        tags = (TagFile(tags_file, FILENAME)
+        if not multi:
+            tags = (TagFile(tags_file, FILENAME)
                        .get_tags_dict(*files, filters=compile_filters(view)))
+        else:
+            with open(tags_file, 'r+') as tf:
+                lines = []
+                for l in tf:
+                    try:
+                        dl = l.decode('utf8')
+                        fields = dl.split('\t')
+                        if len(fields) >= 4 and fields[-1].strip() in ('v', 'i', 'p'):
+                            continue
+                        lines.append(l)
+                    except (UnicodeDecodeError, UnicodeEncodeError):
+                        continue
+                    
+
+            tag_class = type('Tag', (Tag,), dict(root_dir = dirname(tags_file)))
+
+            tags = parse_tag_lines(lines, tag_class=tag_class, filters=compile_filters(view))
+
         if not tags:
             if multi:
                 view.run_command('show_symbols', {'type':'multi'})
