@@ -9,6 +9,7 @@ import pprint
 import re
 import string
 import threading
+import time
 
 from contextlib import contextmanager
 from itertools import chain
@@ -591,7 +592,9 @@ class ShowSymbols(sublime_plugin.TextCommand):
 
             tag_class = type('Tag', (Tag,), dict(root_dir = dirname(tags_file)))
 
+            # start = time.time()
             tags = parse_tag_lines(lines, tag_class=tag_class, filters=compile_filters(view))
+            # print 'took %.4f seconds' % (time.time() - start)
 
         if not tags:
             if multi:
@@ -600,14 +603,15 @@ class ShowSymbols(sublime_plugin.TextCommand):
                 sublime.status_message(
                     'No symbols found **FOR CURRENT FILE**; Try Rebuild?' )
 
-        path_cols = (0, ) if len(files) > 1 else ()
+        # path_cols = (0, ) if len(files) > 1 else ()
+        path_cols = multi
         formatting = functools.partial( format_tag_for_quickopen,
                                         file = bool(path_cols)  )
 
         @prepared_4_quickpanel(formatting, path_cols=())
         def sorted_tags():
             return sorted (
-                chain(*(tags[k] for k in tags)), key=iget('tag_path'))
+                chain.from_iterable(tags.itervalues()), key=iget('tag_path'))
 
         return sorted_tags
 
