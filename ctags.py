@@ -11,6 +11,8 @@ import os
 import subprocess
 import bisect
 import mmap
+import hashlib
+import collections
 
 from os.path import dirname
 
@@ -53,15 +55,49 @@ def splits(string, *splitters):
 
 ################################################################################
 
-def parse_tag_lines(lines, order_by='symbol', tag_class=None, filters=[]):
-    tags_lookup = {}
+# _parse_lines_cache = collections.OrderedDict()
+_parse_lines_cache = {}
+_parse_lines_cache_order = collections.deque()
+def _parse_lines(lines, tag_class):
+    lines = list(lines)
 
+    h = hashlib.md5(''.join(lines)).digest()
+
+    try:
+        return _parse_lines_cache[h]
+    except KeyError:
+        pass
+
+    result = []
     for search_obj in (t for t in (TAGS_RE.search (
                             l.decode('utf8')) for l in lines) if t):
 
         tag = post_process_tag(search_obj)
         if tag_class is not None: tag = tag_class(tag)
+        result.append(tag)
 
+    _parse_lines_cache[h] = result
+    # Python 2.7 code
+    # if len(parse_lines_cache) > 100:
+        # _parse_lines_cache.popitem(0)
+    try:
+        _parse_lines_cache_order.remove(h)
+    except ValueError:
+        pass
+
+    _parse_lines_cache_order.append(h)
+    if len(_parse_lines_cache_order) > 100:
+        del _parse_lines_cache[_parse_lines_cache_order.popleft()]
+        
+    return result
+
+
+def parse_tag_lines(lines, order_by='symbol', tag_class=None, filters=[]):
+    tags_lookup = {}
+
+    tags = _parse_lines(lines, tag_class)
+
+    for tag in tags:
         skip = False
         for f in filters:
             for k, v in f.items():
